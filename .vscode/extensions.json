@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "vercel.turbo-vsc",
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    "esbenp.prettier-vscode",
+    "austenc.tailwind-docs"
+  ]
+}
