@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set affected base ref
+        id: set-affected-base-ref
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "AFFECTED_BASE_REF=origin/${{ github.event.pull_request.base.ref }}" >> $GITHUB_ENV
+          else
+            echo "AFFECTED_BASE_REF=HEAD~1" >> $GITHUB_ENV
+          fi
+
+      - name: Lint affected
+        run: |
+          pnpm turbo run lint --filter=...[$AFFECTED_BASE_REF...HEAD]
+
+      - name: Type check affected
+        run: |
+          pnpm turbo run check-types --filter=...[$AFFECTED_BASE_REF...HEAD]
+
+      - name: Build affected
+        run: |
+          pnpm turbo run build --filter=...[$AFFECTED_BASE_REF...HEAD]
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: build-artifacts-${{ github.sha }}
+          path: |
+            apps/*/dist/
+            libs/*/dist/
+          retention-days: 7
